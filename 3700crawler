@@ -24,23 +24,38 @@ class Crawler:
         self.username = args.username
         self.password = args.password
         self.htmlparser = MyHTMLParser()
+        self.csrftoken = ""
 
     def login(self):
-        request = "GET / HTTP/1.1\r\nHost: %s:%s\r\nReferer: https://%s:%s/accounts/login/?next=/fakebook/\r\n\r\n" % (self.server, self.port, self.server, self.port)
-
+        request = "GET /accounts/login/ HTTP/1.1\nHost: " + self.server + ":" + str(self.port) +"\n\n" 
         print("Request to %s:%d" % (self.server, self.port))
         print(request)
         base_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         mysocket = ssl.wrap_socket(base_socket, ssl_version=ssl.PROTOCOL_TLS, ciphers="AES256-SHA256")
         mysocket.connect((self.server, self.port))
         mysocket.send(request.encode('ascii'))
-
         data = mysocket.recv(1000000).decode('ascii')
-        #self.htmlparser.feed(data)
         print("Response:\n%s" % data)
+        
+        csrftoken = data[data.find("csrftoken="):data.find(";",data.find("csrftoken="))]
 
-        #login_request = "POST / HTTP/1.1\r\nHost: %s:%s\r\nReferer: https://%s:%s/accounts/login/?next=/fakebook/\r\n\r\n" % (self.server, self.port, self.server, self.port)
-
+        middlewaretoken_start = data.find("value=", data.find("csrfmiddlewaretoken")) + len("value=") + 1
+        csrfmiddlewaretoken = data[middlewaretoken_start:data.find("\"",middlewaretoken_start)]
+        
+        login_request = ('username=' + self.username + '&password=' + self.password +'&csrfmiddlewaretoken=' + csrfmiddlewaretoken)
+        
+        request = ("POST /accounts/login/ HTTP/1.1\nHost: " + self.server + ":" + str(self.port) + "\n" +
+                'Content-Type: application/x-www-form-urlencoded\n' +
+                'Content-Length: ' + str(len(login_request)) + '\n' +
+                'Cookie: ' + csrftoken + '\n\n' +
+                login_request + "\n\n")
+        print(request)
+        mysocket.send(request.encode('ascii'))
+        data = mysocket.recv(1000000).decode()
+        print("Response:\n%s" % data)
+        csrftoken = data[data.find("csrftoken="):data.find(";",data.find("csrftoken="))]
+        print(csrftoken)
+        self.csrftoken = csrftoken
     def run(self):
         self.login()
         
