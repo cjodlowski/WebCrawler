@@ -25,9 +25,12 @@ class Crawler:
         self.password = args.password
         self.htmlparser = MyHTMLParser()
         self.csrftoken = ""
+        self.sessionid = ""
 
     def login(self):
-        request = "GET /accounts/login/ HTTP/1.1\nHost: " + self.server + ":" + str(self.port) +"\n\n" 
+        #get message for login page
+        request = ("GET /accounts/login/ HTTP/1.1\n" +
+                "Host: " + self.server + ":" + str(self.port) +"\n\n" )
         print("Request to %s:%d" % (self.server, self.port))
         print(request)
         base_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -41,9 +44,11 @@ class Crawler:
 
         middlewaretoken_start = data.find("value=", data.find("csrfmiddlewaretoken")) + len("value=") + 1
         csrfmiddlewaretoken = data[middlewaretoken_start:data.find("\"",middlewaretoken_start)]
-        
+
+        #login information username passwork and csrfmiddlewaretoken
         login_request = ('username=' + self.username + '&password=' + self.password +'&csrfmiddlewaretoken=' + csrfmiddlewaretoken)
         
+        #sends login information
         request = ("POST /accounts/login/ HTTP/1.1\nHost: " + self.server + ":" + str(self.port) + "\n" +
                 'Content-Type: application/x-www-form-urlencoded\n' +
                 'Content-Length: ' + str(len(login_request)) + '\n' +
@@ -53,11 +58,27 @@ class Crawler:
         mysocket.send(request.encode('ascii'))
         data = mysocket.recv(1000000).decode()
         print("Response:\n%s" % data)
+
+        # get tokens
         csrftoken = data[data.find("csrftoken="):data.find(";",data.find("csrftoken="))]
-        print(csrftoken)
+        #print(csrftoken)
         self.csrftoken = csrftoken
+        sessionid = data[data.find('sessionid='):data.find(';', data.find('sessionid='))]
+        #print(sessionid)
+        self.sessionid = sessionid
+
+        #gets page
+        request = ('GET /fakebook/ HTTP/1.1\n' +
+           "Host: " + self.server + ":" + str(self.port) +"\n" +
+           'Cookie: ' + self.csrftoken + '; ' + self.sessionid + '\n\n')
+        mysocket.send(request.encode('ascii'))
+        data = mysocket.recv(1000000).decode()
+        print("Response:\n%s" % data)
+
     def run(self):
         self.login()
+        
+                
         
 
 if __name__ == "__main__":
