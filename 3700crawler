@@ -2,9 +2,20 @@
 
 import argparse
 import socket
+import ssl
+from html.parser import HTMLParser
 
 DEFAULT_SERVER = "project5.3700.network"
 DEFAULT_PORT = 443
+class MyHTMLParser(HTMLParser):
+    def handle_starttag(self, tag, attrs):
+        print("Encountered a start tag:", tag)
+
+    def handle_endtag(self, tag):
+        print("Encountered an end tag :", tag)
+
+    def handle_data(self, data):
+        print("Encountered some data  :", data)
 
 class Crawler:
     def __init__(self, args):
@@ -12,18 +23,27 @@ class Crawler:
         self.port = args.port
         self.username = args.username
         self.password = args.password
+        self.htmlparser = MyHTMLParser()
 
-    def run(self):
-        request = "GET / HTTP/1.0\r\n\r\n"
+    def login(self):
+        request = "GET / HTTP/1.1\r\nHost: %s:%s\r\nReferer: https://%s:%s/accounts/login/?next=/fakebook/\r\n\r\n" % (self.server, self.port, self.server, self.port)
 
         print("Request to %s:%d" % (self.server, self.port))
         print(request)
-        mysocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        base_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        mysocket = ssl.wrap_socket(base_socket, ssl_version=ssl.PROTOCOL_TLS, ciphers="AES256-SHA256")
         mysocket.connect((self.server, self.port))
         mysocket.send(request.encode('ascii'))
 
-        data = mysocket.recv(1000)
-        print("Response:\n%s" % data.decode('ascii'))
+        data = mysocket.recv(1000000).decode('ascii')
+        #self.htmlparser.feed(data)
+        print("Response:\n%s" % data)
+
+        #login_request = "POST / HTTP/1.1\r\nHost: %s:%s\r\nReferer: https://%s:%s/accounts/login/?next=/fakebook/\r\n\r\n" % (self.server, self.port, self.server, self.port)
+
+    def run(self):
+        self.login()
+        
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='crawl Fakebook')
