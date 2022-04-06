@@ -7,15 +7,24 @@ from html.parser import HTMLParser
 
 DEFAULT_SERVER = "project5.3700.network"
 DEFAULT_PORT = 443
+VISITED = []
+QUEUE = []
+FLAGS = []
+
 class MyHTMLParser(HTMLParser):
     def handle_starttag(self, tag, attrs):
-        print("Encountered a start tag:", tag)
-
-    def handle_endtag(self, tag):
-        print("Encountered an end tag :", tag)
-
-    def handle_data(self, data):
-        print("Encountered some data  :", data)
+        global VISITED, QUEUE, FLAGS
+        atr = dict(attrs)
+        if 'href' in atr and "/fakebook/" in atr['href']:
+            #print(atr['href'])
+            href = atr['href']
+            if href not in VISITED:
+                QUEUE.append(href)
+                #print(QUEUE)
+        elif 'class' in atr and atr['class'] == 'secret_flag':
+                print("Found secret flag!")
+                FLAGS.append("flag")
+            
 
 class Crawler:
     def __init__(self, args):
@@ -23,9 +32,12 @@ class Crawler:
         self.port = args.port
         self.username = args.username
         self.password = args.password
-        self.htmlparser = MyHTMLParser()
+        self.socket = {}
         self.csrftoken = ""
         self.sessionid = ""
+        self.visited = []
+        self.queue = []
+        self.parser = MyHTMLParser()
 
     def login(self):
         #get message for login page
@@ -34,11 +46,12 @@ class Crawler:
         print("Request to %s:%d" % (self.server, self.port))
         print(request)
         base_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        mysocket = ssl.wrap_socket(base_socket, ssl_version=ssl.PROTOCOL_TLS, ciphers="AES256-SHA256")
-        mysocket.connect((self.server, self.port))
-        mysocket.send(request.encode('ascii'))
-        data = mysocket.recv(1000000).decode('ascii')
+        self.socket = ssl.wrap_socket(base_socket, ssl_version=ssl.PROTOCOL_TLS, ciphers="AES256-SHA256")
+        self.socket.connect((self.server, self.port))
+        self.socket.send(request.encode('ascii'))
+        data = self.socket.recv(1000000).decode('ascii')
         print("Response:\n%s" % data)
+        
         
         csrftoken = data[data.find("csrftoken="):data.find(";",data.find("csrftoken="))]
 
@@ -55,9 +68,9 @@ class Crawler:
                 'Cookie: ' + csrftoken + '\n\n' +
                 login_request + "\n\n")
         print(request)
-        mysocket.send(request.encode('ascii'))
-        data = mysocket.recv(1000000).decode()
-        print("Response:\n%s" % data)
+        self.socket.send(request.encode('ascii'))
+        data = self.socket.recv(1000000).decode()
+        #print("Response:\n%s" % data)
 
         # get tokens
         csrftoken = data[data.find("csrftoken="):data.find(";",data.find("csrftoken="))]
@@ -67,16 +80,31 @@ class Crawler:
         #print(sessionid)
         self.sessionid = sessionid
 
+    def parse_response_code(self, data):
+        http_header = data.split("\r\n")[0].split(" ")
+        #print(http_header[1])
+        return http_header[1]
+
+    def get_page(self, href): 
         #gets page
-        request = ('GET /fakebook/ HTTP/1.1\n' +
+        request = ('GET ' + href + ' HTTP/1.1\n' +
            "Host: " + self.server + ":" + str(self.port) +"\n" +
            'Cookie: ' + self.csrftoken + '; ' + self.sessionid + '\n\n')
-        mysocket.send(request.encode('ascii'))
-        data = mysocket.recv(1000000).decode()
-        print("Response:\n%s" % data)
+        self.socket.send(request.encode('ascii'))
+        data = self.socket.recv(1000000).decode()
+        code = self.parse_response_code(data)
+        #print("Response:\n%s" % data[""])
+        self.parser.feed(data)
 
     def run(self):
+        global VISITED, QUEUE
         self.login()
+        self.get_page('/fakebook/')
+        if len(QUEUE) != 0 and len(FLAGS) == 0:
+            next_href = QUEUE.pop(0)
+            self.get_page(next_href)
+            VISITED.append(next_href)
+
         
                 
         
