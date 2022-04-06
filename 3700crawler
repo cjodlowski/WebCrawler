@@ -35,6 +35,7 @@ class MyHTMLParser(HTMLParser):
         if "FLAG" in data and data not in FLAGS:
             FLAGS.append(data)
             print(data)
+            print(len(FLAGS))
             f = open("flags.txt", "a")
             f.write(data + "\n")
             f.close()
@@ -120,7 +121,7 @@ class Crawler:
             self.socket.send(request.encode('ascii'))
             data = self.socket.recv(8192).decode()
             print("reconnected")
-            print(data)
+
         code = int(self.parse_response_code(data))
         if code == 200:
             #everything is good, proceed normally
@@ -150,9 +151,8 @@ class Crawler:
         #count = 0
         while len(QUEUE) != 0 and len(FLAGS) < 5:
             next_href = QUEUE.pop(0)
-            self.get_page(next_href)
-            #print(count)
-            #count += 1
+            if next_href not in VISITED:
+                self.get_page(next_href)
         print(FLAGS)
 
         
