@@ -12,6 +12,10 @@ QUEUE = []
 FLAGS = []
 
 class MyHTMLParser(HTMLParser):
+    def __init__(self):
+        HTMLParser.__init__(self)
+        self.foundFlag = False
+
     def handle_starttag(self, tag, attrs):
         global VISITED, QUEUE, FLAGS
         atr = dict(attrs)
@@ -22,8 +26,17 @@ class MyHTMLParser(HTMLParser):
                 QUEUE.append(href)
                 #print(QUEUE)
         elif 'class' in atr and atr['class'] == 'secret_flag':
-                print("Found secret flag!")
-                FLAGS.append("flag")
+            self.foundFlag = True
+
+    
+    def handle_data(self, data):
+        global FLAGS
+        if self.foundFlag :
+            FLAGS.append(data)
+            f = open("flags.txt", "a")
+            f.write(data + "\n")
+            f.close()
+            self.foundFlag = False
             
 
 class Crawler:
@@ -81,9 +94,10 @@ class Crawler:
         self.sessionid = sessionid
 
     def parse_response_code(self, data):
-        http_header = data.split("\r\n")[0].split(" ")
-        #print(http_header[1])
-        return http_header[1]
+        http_header = data.split("\r\n")
+        print(data)
+        code_header = http_header[0].split(" ")
+        return code_header[1]
 
     def get_page(self, href): 
         #gets page
@@ -92,18 +106,35 @@ class Crawler:
            'Cookie: ' + self.csrftoken + '; ' + self.sessionid + '\n\n')
         self.socket.send(request.encode('ascii'))
         data = self.socket.recv(1000000).decode()
-        code = self.parse_response_code(data)
-        #print("Response:\n%s" % data[""])
-        self.parser.feed(data)
+        code = int(self.parse_response_code(data))
+        if code == 200:
+            #everything is good, proceed normally
+            #print("Response:\n%s" % data)
+            self.parser.feed(data)
+            VISITED.append(href)
+        elif code == 302:
+            #insert the redirect header to the front of the queue
+            redirect = data[data.find('Location'):data.find(';', data.find('Location'))]
+            QUEUE.insert(0, redirect)
+            VISITED.append(href)
+        elif code == 403 or code == 404:
+            #do not try this URL again and do not parse
+            VISITED.append(href)
+        elif code == 500:
+            #server error, just append the current href to the front of the queue to try again
+            QUEUE.insert(0, href)
+        else:
+            print("Unknown code")
+
+        
 
     def run(self):
         global VISITED, QUEUE
         self.login()
         self.get_page('/fakebook/')
-        if len(QUEUE) != 0 and len(FLAGS) == 0:
+        while len(QUEUE) != 0 and len(FLAGS) < 5:
             next_href = QUEUE.pop(0)
             self.get_page(next_href)
-            VISITED.append(next_href)
 
         
                 
