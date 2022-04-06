@@ -25,14 +25,16 @@ class MyHTMLParser(HTMLParser):
             if href not in VISITED:
                 QUEUE.append(href)
                 #print(QUEUE)
-        elif 'class' in atr and atr['class'] == 'secret_flag':
-            self.foundFlag = True
+        #elif 'class' in atr and atr['class'] == 'secret_flag':
+        #    self.foundFlag = True
 
     
     def handle_data(self, data):
-        global FLAGS
-        if self.foundFlag :
+        #global FLAGS
+        #if self.foundFlag and data not in FLAGS:
+        if "FLAG" in data and data not in FLAGS:
             FLAGS.append(data)
+            print(data)
             f = open("flags.txt", "a")
             f.write(data + "\n")
             f.close()
@@ -62,7 +64,7 @@ class Crawler:
         self.socket = ssl.wrap_socket(base_socket, ssl_version=ssl.PROTOCOL_TLS, ciphers="AES256-SHA256")
         self.socket.connect((self.server, self.port))
         self.socket.send(request.encode('ascii'))
-        data = self.socket.recv(1000000).decode('ascii')
+        data = self.socket.recv(8192).decode('ascii')
         print("Response:\n%s" % data)
         
         
@@ -82,7 +84,7 @@ class Crawler:
                 login_request + "\n\n")
         print(request)
         self.socket.send(request.encode('ascii'))
-        data = self.socket.recv(1000000).decode()
+        data = self.socket.recv(8192).decode()
         #print("Response:\n%s" % data)
 
         # get tokens
@@ -94,10 +96,14 @@ class Crawler:
         self.sessionid = sessionid
 
     def parse_response_code(self, data):
-        http_header = data.split("\r\n")
-        print(data)
-        code_header = http_header[0].split(" ")
-        return code_header[1]
+        http_header = data[data.find('HTTP/1.1') + 9 :data.find('HTTP/1.1') + 13]
+        #print(data)
+        return http_header
+
+    def connection_status(self, data) : 
+        status = data[data.find('Connection: ') + len("Connection: ") : data.find("\n", data.find('Connection: '))]
+        #print("Status " + status)
+        return status
 
     def get_page(self, href): 
         #gets page
@@ -105,7 +111,16 @@ class Crawler:
            "Host: " + self.server + ":" + str(self.port) +"\n" +
            'Cookie: ' + self.csrftoken + '; ' + self.sessionid + '\n\n')
         self.socket.send(request.encode('ascii'))
-        data = self.socket.recv(1000000).decode()
+        data = self.socket.recv(8192).decode()
+        if "close" in self.connection_status(data):
+            self.socket.close()
+            base_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket = ssl.wrap_socket(base_socket, ssl_version=ssl.PROTOCOL_TLS, ciphers="AES256-SHA256")
+            self.socket.connect((self.server, self.port))
+            self.socket.send(request.encode('ascii'))
+            data = self.socket.recv(8192).decode()
+            print("reconnected")
+            print(data)
         code = int(self.parse_response_code(data))
         if code == 200:
             #everything is good, proceed normally
@@ -132,9 +147,13 @@ class Crawler:
         global VISITED, QUEUE
         self.login()
         self.get_page('/fakebook/')
+        #count = 0
         while len(QUEUE) != 0 and len(FLAGS) < 5:
             next_href = QUEUE.pop(0)
             self.get_page(next_href)
+            #print(count)
+            #count += 1
+        print(FLAGS)
 
         
                 
