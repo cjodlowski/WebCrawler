@@ -11,10 +11,12 @@ VISITED = []
 QUEUE = []
 FLAGS = []
 
+#a class that extends HTMLParser
+#used to parse through received HTML messages
+#to detect href links and secret flags
 class MyHTMLParser(HTMLParser):
     def __init__(self):
         HTMLParser.__init__(self)
-        self.foundFlag = False
 
     def handle_starttag(self, tag, attrs):
         global VISITED, QUEUE, FLAGS
@@ -30,16 +32,9 @@ class MyHTMLParser(HTMLParser):
 
     
     def handle_data(self, data):
-        #global FLAGS
-        #if self.foundFlag and data not in FLAGS:
+        global FLAGS
         if "FLAG" in data and data not in FLAGS:
             FLAGS.append(data)
-            print(data)
-            print(len(FLAGS))
-            f = open("flags.txt", "a")
-            f.write(data + "\n")
-            f.close()
-            self.foundFlag = False
             
 
 class Crawler:
@@ -51,24 +46,25 @@ class Crawler:
         self.socket = {}
         self.csrftoken = ""
         self.sessionid = ""
-        self.visited = []
-        self.queue = []
+        self.visited = [] #keeps track of pages we have visited
+        self.queue = [] #pages we have yet to crawl
         self.parser = MyHTMLParser()
 
     def login(self):
         #get message for login page
         request = ("GET /accounts/login/ HTTP/1.1\n" +
                 "Host: " + self.server + ":" + str(self.port) +"\n\n" )
-        print("Request to %s:%d" % (self.server, self.port))
-        print(request)
+        # print("Request to %s:%d" % (self.server, self.port))
+        # print(request)
+        #creation of socket and wrapping it in TLS
         base_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket = ssl.wrap_socket(base_socket, ssl_version=ssl.PROTOCOL_TLS, ciphers="AES256-SHA256")
         self.socket.connect((self.server, self.port))
         self.socket.send(request.encode('ascii'))
         data = self.socket.recv(8192).decode('ascii')
-        print("Response:\n%s" % data)
+        #print("Response:\n%s" % data)
         
-        
+        #receive csrf and middleware tokens by filtering data string
         csrftoken = data[data.find("csrftoken="):data.find(";",data.find("csrftoken="))]
 
         middlewaretoken_start = data.find("value=", data.find("csrfmiddlewaretoken")) + len("value=") + 1
@@ -83,7 +79,7 @@ class Crawler:
                 'Content-Length: ' + str(len(login_request)) + '\n' +
                 'Cookie: ' + csrftoken + '\n\n' +
                 login_request + "\n\n")
-        print(request)
+        # print(request)
         self.socket.send(request.encode('ascii'))
         data = self.socket.recv(8192).decode()
         #print("Response:\n%s" % data)
@@ -96,31 +92,36 @@ class Crawler:
         #print(sessionid)
         self.sessionid = sessionid
 
+    #used to parse the HTTP response code by filtering through the data response
     def parse_response_code(self, data):
         http_header = data[data.find('HTTP/1.1') + 9 :data.find('HTTP/1.1') + 13]
         #print(data)
         return http_header
 
+    #used to determine if the server has closed the connection by checking the Connection HTTP header
     def connection_status(self, data) : 
         status = data[data.find('Connection: ') + len("Connection: ") : data.find("\n", data.find('Connection: '))]
         #print("Status " + status)
         return status
 
     def get_page(self, href): 
-        #gets page
+        #gets page at the given href string
         request = ('GET ' + href + ' HTTP/1.1\n' +
            "Host: " + self.server + ":" + str(self.port) +"\n" +
            'Cookie: ' + self.csrftoken + '; ' + self.sessionid + '\n\n')
         self.socket.send(request.encode('ascii'))
         data = self.socket.recv(8192).decode()
+
+        #checking if the server has closed the connection
+        #closes the original socket and creates a new one
         if "close" in self.connection_status(data):
             self.socket.close()
             base_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket = ssl.wrap_socket(base_socket, ssl_version=ssl.PROTOCOL_TLS, ciphers="AES256-SHA256")
             self.socket.connect((self.server, self.port))
-            self.socket.send(request.encode('ascii'))
-            data = self.socket.recv(8192).decode()
-            print("reconnected")
+            # self.socket.send(request.encode('ascii'))
+            # data = self.socket.recv(8192).decode()
+            # print("reconnected")
 
         code = int(self.parse_response_code(data))
         if code == 200:
@@ -129,6 +130,7 @@ class Crawler:
             self.parser.feed(data)
             VISITED.append(href)
         elif code == 302:
+            #page redirects to another link
             #insert the redirect header to the front of the queue
             redirect = data[data.find('Location'):data.find(';', data.find('Location'))]
             QUEUE.insert(0, redirect)
@@ -147,13 +149,18 @@ class Crawler:
     def run(self):
         global VISITED, QUEUE
         self.login()
+        #initial page to crawl
         self.get_page('/fakebook/')
-        #count = 0
+        
+        #crawl fakebook while we still have links in our queue
+        #or we haven't found all of our flags
         while len(QUEUE) != 0 and len(FLAGS) < 5:
             next_href = QUEUE.pop(0)
             if next_href not in VISITED:
                 self.get_page(next_href)
-        print(FLAGS)
+        #print our final flags
+        for flag in FLAGS :
+            print(flag[6:])
 
         
                 
