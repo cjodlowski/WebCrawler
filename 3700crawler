@@ -18,6 +18,7 @@ class MyHTMLParser(HTMLParser):
     def __init__(self):
         HTMLParser.__init__(self)
 
+    #checks for links in the page
     def handle_starttag(self, tag, attrs):
         global VISITED, QUEUE, FLAGS
         atr = dict(attrs)
@@ -26,11 +27,8 @@ class MyHTMLParser(HTMLParser):
             href = atr['href']
             if href not in VISITED:
                 QUEUE.append(href)
-                #print(QUEUE)
-        #elif 'class' in atr and atr['class'] == 'secret_flag':
-        #    self.foundFlag = True
-
-    
+                
+    #checks for flags in the page makes sure that it isn't one of the same flags just in case
     def handle_data(self, data):
         global FLAGS
         if "FLAG" in data and data not in FLAGS:
@@ -50,6 +48,7 @@ class Crawler:
         self.queue = [] #pages we have yet to crawl
         self.parser = MyHTMLParser()
 
+    # logs into the page (sends inital get and post messages)
     def login(self):
         #get message for login page
         request = ("GET /accounts/login/ HTTP/1.1\n" +
@@ -104,6 +103,7 @@ class Crawler:
         #print("Status " + status)
         return status
 
+    #sends get message for specified page
     def get_page(self, href): 
         #gets page at the given href string
         request = ('GET ' + href + ' HTTP/1.1\n' +
@@ -145,7 +145,7 @@ class Crawler:
             print("Unknown code")
 
         
-
+    #Connects to the page and then crawls through it
     def run(self):
         global VISITED, QUEUE
         self.login()
